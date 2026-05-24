@@ -21,15 +21,24 @@ import java.nio.charset.StandardCharsets;
 import javax.net.ssl.HttpsURLConnection;
 
 public final class NanoBananaApiClient {
+    public static final int PREVIEW_UPLOAD_DIMENSION = 1024;
+    public static final int SAVED_UPLOAD_DIMENSION = 1280;
+    public static final String PREVIEW_OUTPUT_SIZE = "512";
+    public static final String SAVED_OUTPUT_SIZE = "1K";
+
     private static final String ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/"
                     + "gemini-3.1-flash-image-preview:generateContent";
-    private static final int MAX_UPLOAD_DIMENSION = 1280;
     private static final int JPEG_QUALITY = 90;
 
-    public Bitmap transform(String apiKey, Bitmap sourceImage, String prompt)
+    public Bitmap transform(
+            String apiKey,
+            byte[] sourceImageBytes,
+            String prompt,
+            String outputImageSize
+    )
             throws IOException, JSONException {
-        JSONObject request = buildRequest(sourceImage, prompt);
+        JSONObject request = buildRequest(sourceImageBytes, prompt, outputImageSize);
         byte[] payload = request.toString().getBytes(StandardCharsets.UTF_8);
 
         HttpsURLConnection connection = (HttpsURLConnection) new URL(ENDPOINT).openConnection();
@@ -62,10 +71,23 @@ public final class NanoBananaApiClient {
         }
     }
 
-    private JSONObject buildRequest(Bitmap sourceImage, String prompt)
-            throws IOException, JSONException {
-        byte[] imageBytes = encodeImage(sourceImage);
-        String imageData = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
+    public byte[] prepareImage(Bitmap sourceImage, int maxUploadDimension) throws IOException {
+        Bitmap uploadBitmap = resizeForUpload(sourceImage, maxUploadDimension);
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            if (!uploadBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, outputStream)) {
+                throw new IOException("画像の送信準備に失敗しました。");
+            }
+            return outputStream.toByteArray();
+        } finally {
+            if (uploadBitmap != sourceImage) {
+                uploadBitmap.recycle();
+            }
+        }
+    }
+
+    private JSONObject buildRequest(byte[] sourceImageBytes, String prompt, String outputImageSize)
+            throws JSONException {
+        String imageData = Base64.encodeToString(sourceImageBytes, Base64.NO_WRAP);
 
         JSONArray parts = new JSONArray()
                 .put(new JSONObject().put("text", prompt))
@@ -80,36 +102,29 @@ public final class NanoBananaApiClient {
                 .put(new JSONObject().put("parts", parts));
 
         JSONObject generationConfig = new JSONObject()
-                .put("responseModalities", new JSONArray().put("IMAGE"));
+                .put("responseModalities", new JSONArray().put("IMAGE"))
+                .put(
+                        "responseFormat",
+                        new JSONObject().put(
+                                "image",
+                                new JSONObject().put("imageSize", outputImageSize)
+                        )
+                );
 
         return new JSONObject()
                 .put("contents", contents)
                 .put("generationConfig", generationConfig);
     }
 
-    private byte[] encodeImage(Bitmap sourceImage) throws IOException {
-        Bitmap uploadBitmap = resizeForUpload(sourceImage);
-        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            if (!uploadBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, outputStream)) {
-                throw new IOException("画像の送信準備に失敗しました。");
-            }
-            return outputStream.toByteArray();
-        } finally {
-            if (uploadBitmap != sourceImage) {
-                uploadBitmap.recycle();
-            }
-        }
-    }
-
-    private Bitmap resizeForUpload(Bitmap sourceImage) {
+    private Bitmap resizeForUpload(Bitmap sourceImage, int maxUploadDimension) {
         int width = sourceImage.getWidth();
         int height = sourceImage.getHeight();
         int largestDimension = Math.max(width, height);
-        if (largestDimension <= MAX_UPLOAD_DIMENSION) {
+        if (largestDimension <= maxUploadDimension) {
             return sourceImage;
         }
 
-        float scale = MAX_UPLOAD_DIMENSION / (float) largestDimension;
+        float scale = maxUploadDimension / (float) largestDimension;
         return Bitmap.createScaledBitmap(
                 sourceImage,
                 Math.round(width * scale),
