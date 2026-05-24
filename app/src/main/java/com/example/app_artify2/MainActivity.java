@@ -1,9 +1,15 @@
 package com.example.app_artify2;
 
+import android.Manifest;
+import android.content.ContentValues;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -14,13 +20,19 @@ import android.widget.TextView;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia;
+import androidx.activity.result.contract.ActivityResultContracts.RequestPermission;
 import androidx.activity.result.contract.ActivityResultContracts.TakePicture;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -40,12 +52,14 @@ public class MainActivity extends AppCompatActivity {
 
     private ActivityResultLauncher<PickVisualMediaRequest> photoPicker;
     private ActivityResultLauncher<Uri> cameraLauncher;
+    private ActivityResultLauncher<String> storagePermissionLauncher;
     private ExecutorService executorService;
     private final NanoBananaApiClient apiClient = new NanoBananaApiClient();
 
     private Button selectPhotoButton;
     private Button takePhotoButton;
     private Button convertButton;
+    private Button saveButton;
     private ImageView inputImageView;
     private ImageView outputImageView;
     private Spinner styleSpinner;
@@ -68,10 +82,21 @@ public class MainActivity extends AppCompatActivity {
         executorService = Executors.newSingleThreadExecutor();
         photoPicker = registerForActivityResult(new PickVisualMedia(), this::onPhotoSelected);
         cameraLauncher = registerForActivityResult(new TakePicture(), this::onPhotoTaken);
+        storagePermissionLauncher = registerForActivityResult(
+                new RequestPermission(),
+                permissionGranted -> {
+                    if (permissionGranted) {
+                        saveGeneratedImage();
+                    } else {
+                        setStatus(R.string.error_storage_permission);
+                    }
+                }
+        );
 
         selectPhotoButton.setOnClickListener(view -> selectPhoto());
         takePhotoButton.setOnClickListener(view -> takePhoto());
         convertButton.setOnClickListener(view -> convertImage());
+        saveButton.setOnClickListener(view -> requestSaveImage());
         updateControls();
     }
 
@@ -79,6 +104,7 @@ public class MainActivity extends AppCompatActivity {
         selectPhotoButton = findViewById(R.id.select_photo_button);
         takePhotoButton = findViewById(R.id.take_photo_button);
         convertButton = findViewById(R.id.convert_button);
+        saveButton = findViewById(R.id.save_button);
         inputImageView = findViewById(R.id.input_image_view);
         outputImageView = findViewById(R.id.output_image_view);
         styleSpinner = findViewById(R.id.style_spinner);
@@ -185,6 +211,100 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void requestSaveImage() {
+        if (outputBitmap == null || processing) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            return;
+        }
+        saveGeneratedImage();
+    }
+
+    private void saveGeneratedImage() {
+        if (outputBitmap == null || processing) {
+            return;
+        }
+        Bitmap bitmapToSave = outputBitmap.copy(Bitmap.Config.ARGB_8888, false);
+        if (bitmapToSave == null) {
+            showFailure(getString(R.string.error_save));
+            return;
+        }
+
+        setProcessing(true);
+        setStatus(R.string.status_saving);
+        executorService.execute(() -> {
+            try {
+                writeGeneratedImage(bitmapToSave);
+                runOnUiThread(() -> {
+                    if (!destroyed) {
+                        setProcessing(false);
+                        setStatus(R.string.status_saved);
+                    }
+                });
+            } catch (IOException | RuntimeException exception) {
+                runOnUiThread(() -> showFailure(getString(R.string.error_save)));
+            } finally {
+                bitmapToSave.recycle();
+            }
+        });
+    }
+
+    @SuppressWarnings("deprecation")
+    private void writeGeneratedImage(Bitmap bitmap) throws IOException {
+        String fileName = "Artify_"
+                + new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(new Date())
+                + ".jpg";
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            values.put(
+                    MediaStore.Images.Media.RELATIVE_PATH,
+                    Environment.DIRECTORY_PICTURES + "/Artify"
+            );
+            values.put(MediaStore.Images.Media.IS_PENDING, 1);
+        } else {
+            File directory = new File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    "Artify"
+            );
+            if (!directory.exists() && !directory.mkdirs()) {
+                throw new IOException("Unable to create output directory.");
+            }
+            values.put(MediaStore.Images.Media.DATA, new File(directory, fileName).getAbsolutePath());
+        }
+
+        Uri outputUri = getContentResolver().insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                values
+        );
+        if (outputUri == null) {
+            throw new IOException("Unable to create media entry.");
+        }
+
+        try {
+            try (OutputStream outputStream = getContentResolver().openOutputStream(outputUri)) {
+                if (outputStream == null
+                        || !bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)) {
+                    throw new IOException("Unable to write generated image.");
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues complete = new ContentValues();
+                complete.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(outputUri, complete, null, null);
+            }
+        } catch (IOException | RuntimeException exception) {
+            getContentResolver().delete(outputUri, null, null);
+            throw exception;
+        }
+    }
+
     private Bitmap loadSelectedBitmap(Uri uri) throws IOException {
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
@@ -264,6 +384,7 @@ public class MainActivity extends AppCompatActivity {
         takePhotoButton.setEnabled(!processing);
         styleSpinner.setEnabled(!processing);
         convertButton.setEnabled(!processing && inputBitmap != null);
+        saveButton.setEnabled(!processing && outputBitmap != null);
     }
 
     private void setStatus(int stringId) {

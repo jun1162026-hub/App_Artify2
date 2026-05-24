@@ -9,6 +9,7 @@
     <string name="style_label">変更する画風</string>
     <string name="convert">画風を変換</string>
     <string name="result_photo">変換結果</string>
+    <string name="save_result">結果を保存</string>
     <string name="input_image_description">変換前の写真</string>
     <string name="output_image_description">画風変換後の写真</string>
     <string name="status_initial">写真を選択するか、その場で撮影してください。</string>
@@ -18,9 +19,13 @@
     <string name="status_loading">写真を読み込んでいます…</string>
     <string name="status_converting">Nano Banana 2 で変換中です…</string>
     <string name="status_complete">変換が完了しました。</string>
+    <string name="status_saving">生成画像を保存しています…</string>
+    <string name="status_saved">生成画像を Pictures/Artify に保存しました。</string>
     <string name="error_api_key">MainActivity.java の API_KEY を実際の API キーに置き換えてください。</string>
     <string name="error_image">写真を読み込めませんでした。</string>
     <string name="error_camera">カメラを起動できませんでした。</string>
+    <string name="error_save">生成画像を保存できませんでした。</string>
+    <string name="error_storage_permission">保存には写真フォルダへの書き込み許可が必要です。</string>
     <string name="error_request">変換に失敗しました: %1$s</string>
     <string-array name="style_names">
         <item>水彩画</item>

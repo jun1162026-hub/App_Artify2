@@ -1,6 +1,6 @@
 # App_Artify2 - Nano Banana 2 Style Editor
 
-Android Studio の既存プロジェクトへマージするための、最小構成の Java/XML 実装です。写真フォルダから画像を 1 枚選択するか、その場で撮影し、画風を選ぶと、Gemini API の **Nano Banana 2** (`gemini-3.1-flash-image-preview`) に画像編集を依頼して結果を表示します。
+Android Studio の既存プロジェクトへマージするための、最小構成の Java/XML 実装です。写真フォルダから画像を 1 枚選択するか、その場で撮影し、画風を選ぶと、Gemini API の **Nano Banana 2** (`gemini-3.1-flash-image-preview`) に画像編集を依頼して結果を表示・保存します。
 
 ## 前提
 
@@ -27,7 +27,7 @@ app/src/main/res/xml/file_paths.xml
 
 このリポジトリでは package / namespace を `com.example.app_artify2` としています。Android Studio 側の namespace が異なる場合は、Java ファイルの `package` 宣言と格納ディレクトリ、manifest の activity 解決先をプロジェクト側に合わせてください。
 
-`AndroidManifest.xml` は初期プロジェクトの launcher icon と theme が存在する前提の例です。プロジェクト側の icon / theme / backup 属性名が異なる場合は、それらを保持したまま `INTERNET` permission、`MainActivity`、Photo Picker 用 `service`、撮影用 `FileProvider` をマージしてください。
+`AndroidManifest.xml` は初期プロジェクトの launcher icon と theme が存在する前提の例です。プロジェクト側の icon / theme / backup 属性名が異なる場合は、それらを保持したまま `INTERNET` permission、API 28 以下でのみ使用する `WRITE_EXTERNAL_STORAGE` permission、`MainActivity`、Photo Picker 用 `service`、撮影用 `FileProvider` をマージしてください。
 
 HTTPS 通信は `INTERNET` permission と `HttpsURLConnection` により行います。manifest では `android:usesCleartextTraffic="false"` を設定し、暗号化されていない HTTP 通信を許可しない構成にしています。Gemini API はシステムが信頼する証明書を使う HTTPS endpoint のため、追加の network security resource は不要です。
 
@@ -70,6 +70,7 @@ private static final String API_KEY = "Your_API_Key";
 3. `写真を選択` から写真フォルダ内の画像を選ぶか、`写真を撮影` で新しい写真を撮ります。
 4. 画風を選択し、`画風を変換` をタップします。
 5. API から返った変換済み画像が画面下部に表示されます。
+6. `結果を保存` をタップすると、生成画像が端末の `Pictures/Artify` に JPEG として保存されます。
 
 配布アプリにする場合は、API キーをクライアントへ埋め込まない認証・プロキシ設計へ移行してください。
 
@@ -81,7 +82,9 @@ private static final String API_KEY = "Your_API_Key";
 - Output: response parts に含まれる base64 `inlineData` 画像
 - Transport: `HttpsURLConnection` の TLS 通信のみ。cleartext HTTP は manifest で無効化。
 
-写真は通信量を抑えるため、送信前に最大辺 1280 px 以下の JPEG に縮小します。`写真を撮影` は `TakePicture` と `FileProvider` でアプリ cache 内の一時ファイルへ撮影し、変換入力として読み込んだ後に削除します。撮影した元画像を写真フォルダへ保存する機能は含みません。
+写真は通信量を抑えるため、送信前に最大辺 1280 px 以下の JPEG に縮小します。`写真を撮影` は `TakePicture` と `FileProvider` でアプリ cache 内の一時ファイルへ撮影し、変換入力として読み込んだ後に削除します。撮影した元画像は保存せず、API で生成された結果のみを保存します。
+
+保存処理は `MediaStore` を使います。Android 10 (API 29) 以降では追加権限なしで `Pictures/Artify` に保存し、Android 6.0〜9 (API 23〜28) では保存ボタンを押した時に限り `WRITE_EXTERNAL_STORAGE` を要求します。manifest ではこの権限を `android:maxSdkVersion="28"` に制限しています。
 
 ## References
 
@@ -90,3 +93,4 @@ private static final String API_KEY = "Your_API_Key";
 - [Android Photo Picker](https://developer.android.com/training/data-storage/shared/photo-picker)
 - [TakePicture contract](https://developer.android.com/reference/androidx/activity/result/contract/ActivityResultContracts.TakePicture)
 - [FileProvider](https://developer.android.com/reference/androidx/core/content/FileProvider)
+- [Access media files from shared storage](https://developer.android.com/training/data-storage/shared/media)
