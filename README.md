@@ -1,6 +1,6 @@
 # App_Artify2 - Nano Banana 2 Style Editor
 
-Android Studio の既存プロジェクトへマージするための、最小構成の Java/XML 実装です。写真フォルダから画像を 1 枚選択するか、その場で撮影し、画風を選ぶと、Gemini API の **Nano Banana 2** (`gemini-3.1-flash-image-preview`) に画像編集を依頼して結果を表示・保存します。
+Android Studio の既存プロジェクトへマージするための、最小構成の Java/XML 実装です。写真フォルダから画像を 1 枚選択するか、その場で撮影し、画風を選ぶと、Gemini API の **Nano Banana 2** (`gemini-3.1-flash-image-preview`) に画像編集を依頼して高速プレビューし、高品質版を保存します。
 
 ## 前提
 
@@ -68,11 +68,21 @@ private static final String API_KEY = "Your_API_Key";
 1. Google AI Studio で Nano Banana 2 を使用可能な paid API key を取得します。
 2. `MainActivity.java` の `"Your_API_Key"` を実 API key に置き換え、アプリを起動します。
 3. `写真を選択` から写真フォルダ内の画像を選ぶか、`写真を撮影` で新しい写真を撮ります。
-4. 画風を選択し、`画風を変換` をタップします。
-5. API から返った変換済み画像が画面下部に表示されます。
-6. `結果を保存` をタップすると、生成画像が端末の `Pictures/Artify` に JPEG として保存されます。
+4. 画風を選択し、`画風をプレビュー` をタップします。
+5. API から返った `512` 解像度ティアの変換プレビュー画像が画面下部に表示されます。
+6. `高品質で保存` をタップすると、同じ画風で 1K 画像を再生成し、端末の `Pictures/Artify` に JPEG として保存します。
 
 配布アプリにする場合は、API キーをクライアントへ埋め込まない認証・プロキシ設計へ移行してください。
+
+## 画風プリセット
+
+次の 10 種類から選択できます。
+
+- 水彩画、浮世絵、油彩画、アニメ背景美術
+- ゴッホ風、モネ風、ピカソ風（キュビスム）
+- クリムト風、フェルメール風、ムンク風
+
+実在の画家プリセットは特定作品を複製する指定ではなく、筆致、光、構図、色彩などの特徴をプロンプト化しています。
 
 ## API 実装
 
@@ -80,9 +90,15 @@ private static final String API_KEY = "Your_API_Key";
 - Header: `x-goog-api-key`
 - Input: style instruction text + JPEG の base64 `inline_data`
 - Output: response parts に含まれる base64 `inlineData` 画像
+- Preview output size: `generationConfig.responseFormat.image.imageSize = "512"`
+- Saved output size: `generationConfig.responseFormat.image.imageSize = "1K"`
 - Transport: `HttpsURLConnection` の TLS 通信のみ。cleartext HTTP は manifest で無効化。
 
-写真は通信量を抑えるため、送信前に最大辺 1280 px 以下の JPEG に縮小します。`写真を撮影` は `TakePicture` と `FileProvider` でアプリ cache 内の一時ファイルへ撮影し、変換入力として読み込んだ後に削除します。撮影した元画像は保存せず、API で生成された結果のみを保存します。
+画面プレビューは待ち時間を抑えるため、入力を最大辺 1024 px の JPEG に縮小し、Nano Banana 2 が対応する `512` 出力を要求します。同じ写真で別の画風を試す場合は、作成済みのプレビュー入力 JPEG を再利用します。
+
+`高品質で保存` は、プレビュー画像を表示している状態では同じ画風プロンプトで新たに API を呼び出し、入力を最大辺 1280 px として `1K` 出力を要求します。追加の API 呼び出しと料金が発生し、生成処理の性質上、保存された高品質画像はプレビューと細部が異なる場合があります。保存に成功すると、画面表示も実際に保存した高品質画像に更新します。すでに高品質画像を表示している状態で再度保存する場合は、その表示画像を保存し、API を再呼び出ししません。
+
+`写真を撮影` は `TakePicture` と `FileProvider` でアプリ cache 内の一時ファイルへ撮影し、変換入力として読み込んだ後に削除します。撮影した元画像は保存せず、API で生成された結果のみを保存します。
 
 保存処理は `MediaStore` を使います。Android 10 (API 29) 以降では追加権限なしで `Pictures/Artify` に保存し、Android 6.0〜9 (API 23〜28) では保存ボタンを押した時に限り `WRITE_EXTERNAL_STORAGE` を要求します。manifest ではこの権限を `android:maxSdkVersion="28"` に制限しています。
 

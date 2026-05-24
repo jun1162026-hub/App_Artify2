@@ -47,7 +47,25 @@ public class MainActivity extends AppCompatActivity {
             "Transform the provided photograph into an expressive oil painting "
                     + "with visible brush strokes, layered paint, and rich museum-style color.",
             "Transform the provided photograph into a hand-painted anime background scene "
-                    + "with warm light, detailed scenery, and cinematic color."
+                    + "with warm light, detailed scenery, and cinematic color.",
+            "Transform the provided photograph into a painting inspired by Vincent van Gogh, "
+                    + "with swirling directional brushwork, thick impasto, and vivid cobalt-blue "
+                    + "and yellow contrasts.",
+            "Transform the provided photograph into a painting inspired by Claude Monet, "
+                    + "with softly broken color, luminous atmospheric light, and gently "
+                    + "dissolved edges.",
+            "Transform the provided photograph into a Cubist painting inspired by Pablo Picasso, "
+                    + "with geometric facets, multiple viewpoints, strong outlines, and balanced "
+                    + "ochre and blue planes.",
+            "Transform the provided photograph into a decorative painting inspired by Gustav "
+                    + "Klimt, with golden mosaic-like ornament, patterned surfaces, and elegant "
+                    + "flat composition.",
+            "Transform the provided photograph into a painting inspired by Johannes Vermeer, "
+                    + "with quiet window light, soft realism, and deep ultramarine and warm "
+                    + "yellow accents.",
+            "Transform the provided photograph into an expressionist painting inspired by "
+                    + "Edvard Munch, with flowing contours, intense color contrast, and a "
+                    + "dramatic emotional atmosphere."
     };
 
     private ActivityResultLauncher<PickVisualMediaRequest> photoPicker;
@@ -68,6 +86,10 @@ public class MainActivity extends AppCompatActivity {
 
     private Bitmap inputBitmap;
     private Bitmap outputBitmap;
+    private byte[] previewInputBytes;
+    private byte[] savedInputBytes;
+    private String outputPrompt;
+    private boolean outputIsHighQuality;
     private Uri pendingCameraUri;
     private File pendingCameraFile;
     private boolean processing;
@@ -196,10 +218,24 @@ public class MainActivity extends AppCompatActivity {
         setProcessing(true);
         setStatus(R.string.status_converting);
         Bitmap source = inputBitmap;
+        byte[] encodedSource = previewInputBytes;
         executorService.execute(() -> {
             try {
-                Bitmap result = apiClient.transform(API_KEY, source, prompt);
-                runOnUiThread(() -> showOutputImage(result));
+                byte[] preparedImage = encodedSource;
+                if (preparedImage == null) {
+                    preparedImage = apiClient.prepareImage(
+                            source,
+                            NanoBananaApiClient.PREVIEW_UPLOAD_DIMENSION
+                    );
+                }
+                Bitmap result = apiClient.transform(
+                        API_KEY,
+                        preparedImage,
+                        prompt,
+                        NanoBananaApiClient.PREVIEW_OUTPUT_SIZE
+                );
+                byte[] cachedImage = preparedImage;
+                runOnUiThread(() -> showOutputImage(result, prompt, cachedImage));
             } catch (Exception exception) {
                 String message = exception.getMessage() == null
                         ? getString(R.string.error_image)
@@ -225,9 +261,49 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void saveGeneratedImage() {
-        if (outputBitmap == null || processing) {
+        if (outputBitmap == null || outputPrompt == null || inputBitmap == null || processing) {
             return;
         }
+        if (outputIsHighQuality) {
+            saveDisplayedHighQualityImage();
+            return;
+        }
+
+        setProcessing(true);
+        setStatus(R.string.status_generating_saved);
+        Bitmap source = inputBitmap;
+        byte[] encodedSource = savedInputBytes;
+        String prompt = outputPrompt;
+        executorService.execute(() -> {
+            try {
+                byte[] preparedImage = encodedSource;
+                if (preparedImage == null) {
+                    preparedImage = apiClient.prepareImage(
+                            source,
+                            NanoBananaApiClient.SAVED_UPLOAD_DIMENSION
+                    );
+                }
+                Bitmap highQualityResult = apiClient.transform(
+                        API_KEY,
+                        preparedImage,
+                        prompt,
+                        NanoBananaApiClient.SAVED_OUTPUT_SIZE
+                );
+                try {
+                    writeGeneratedImage(highQualityResult);
+                } catch (IOException | RuntimeException exception) {
+                    highQualityResult.recycle();
+                    throw exception;
+                }
+                byte[] cachedImage = preparedImage;
+                runOnUiThread(() -> showSavedOutputImage(highQualityResult, cachedImage));
+            } catch (Exception exception) {
+                runOnUiThread(() -> showFailure(getString(R.string.error_save)));
+            }
+        });
+    }
+
+    private void saveDisplayedHighQualityImage() {
         Bitmap bitmapToSave = outputBitmap.copy(Bitmap.Config.ARGB_8888, false);
         if (bitmapToSave == null) {
             showFailure(getString(R.string.error_save));
@@ -346,6 +422,10 @@ public class MainActivity extends AppCompatActivity {
         }
         recycleInputBitmap();
         inputBitmap = bitmap;
+        previewInputBytes = null;
+        savedInputBytes = null;
+        outputPrompt = null;
+        outputIsHighQuality = false;
         inputImageView.setImageBitmap(bitmap);
         inputImageView.setVisibility(View.VISIBLE);
         recycleOutputBitmap();
@@ -353,17 +433,35 @@ public class MainActivity extends AppCompatActivity {
         setStatus(R.string.status_selected);
     }
 
-    private void showOutputImage(Bitmap bitmap) {
+    private void showOutputImage(Bitmap bitmap, String prompt, byte[] cachedInputBytes) {
         if (destroyed) {
             bitmap.recycle();
             return;
         }
         recycleOutputBitmap();
         outputBitmap = bitmap;
+        outputPrompt = prompt;
+        previewInputBytes = cachedInputBytes;
+        outputIsHighQuality = false;
         outputImageView.setImageBitmap(bitmap);
         outputImageView.setVisibility(View.VISIBLE);
         setProcessing(false);
         setStatus(R.string.status_complete);
+    }
+
+    private void showSavedOutputImage(Bitmap bitmap, byte[] cachedInputBytes) {
+        if (destroyed) {
+            bitmap.recycle();
+            return;
+        }
+        recycleOutputBitmap();
+        outputBitmap = bitmap;
+        savedInputBytes = cachedInputBytes;
+        outputIsHighQuality = true;
+        outputImageView.setImageBitmap(bitmap);
+        outputImageView.setVisibility(View.VISIBLE);
+        setProcessing(false);
+        setStatus(R.string.status_saved);
     }
 
     private void showFailure(String message) {
