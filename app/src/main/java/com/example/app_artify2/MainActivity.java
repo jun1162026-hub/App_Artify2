@@ -6,7 +6,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
@@ -15,8 +14,11 @@ import android.widget.TextView;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia;
+import androidx.activity.result.contract.ActivityResultContracts.TakePicture;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.ExecutorService;
@@ -24,6 +26,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     private static final int MAX_PREVIEW_DIMENSION = 2048;
+    private static final String API_KEY = "Your_API_Key";
     private static final String[] STYLE_PROMPTS = {
             "Transform the provided photograph into a delicate watercolor painting "
                     + "with soft washes, textured paper, and gentle pigment edges.",
@@ -36,11 +39,12 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private ActivityResultLauncher<PickVisualMediaRequest> photoPicker;
+    private ActivityResultLauncher<Uri> cameraLauncher;
     private ExecutorService executorService;
     private final NanoBananaApiClient apiClient = new NanoBananaApiClient();
 
-    private EditText apiKeyInput;
     private Button selectPhotoButton;
+    private Button takePhotoButton;
     private Button convertButton;
     private ImageView inputImageView;
     private ImageView outputImageView;
@@ -50,6 +54,8 @@ public class MainActivity extends AppCompatActivity {
 
     private Bitmap inputBitmap;
     private Bitmap outputBitmap;
+    private Uri pendingCameraUri;
+    private File pendingCameraFile;
     private boolean processing;
     private boolean destroyed;
 
@@ -61,15 +67,17 @@ public class MainActivity extends AppCompatActivity {
         bindViews();
         executorService = Executors.newSingleThreadExecutor();
         photoPicker = registerForActivityResult(new PickVisualMedia(), this::onPhotoSelected);
+        cameraLauncher = registerForActivityResult(new TakePicture(), this::onPhotoTaken);
 
         selectPhotoButton.setOnClickListener(view -> selectPhoto());
+        takePhotoButton.setOnClickListener(view -> takePhoto());
         convertButton.setOnClickListener(view -> convertImage());
         updateControls();
     }
 
     private void bindViews() {
-        apiKeyInput = findViewById(R.id.api_key_input);
         selectPhotoButton = findViewById(R.id.select_photo_button);
+        takePhotoButton = findViewById(R.id.take_photo_button);
         convertButton = findViewById(R.id.convert_button);
         inputImageView = findViewById(R.id.input_image_view);
         outputImageView = findViewById(R.id.output_image_view);
@@ -89,7 +97,43 @@ public class MainActivity extends AppCompatActivity {
             setStatus(R.string.status_cancelled);
             return;
         }
+        loadPhoto(uri, null);
+    }
 
+    private void takePhoto() {
+        try {
+            clearPendingCameraFile();
+            File cameraDirectory = new File(getCacheDir(), "camera");
+            if (!cameraDirectory.exists() && !cameraDirectory.mkdirs()) {
+                throw new IOException("Unable to create camera directory.");
+            }
+            pendingCameraFile = File.createTempFile("artify_capture_", ".jpg", cameraDirectory);
+            pendingCameraUri = FileProvider.getUriForFile(
+                    this,
+                    getPackageName() + ".fileprovider",
+                    pendingCameraFile
+            );
+            cameraLauncher.launch(pendingCameraUri);
+        } catch (IOException | IllegalArgumentException exception) {
+            clearPendingCameraFile();
+            showFailure(getString(R.string.error_camera));
+        }
+    }
+
+    private void onPhotoTaken(Boolean imageSaved) {
+        if (Boolean.TRUE.equals(imageSaved) && pendingCameraUri != null) {
+            Uri uri = pendingCameraUri;
+            File temporaryFile = pendingCameraFile;
+            pendingCameraUri = null;
+            pendingCameraFile = null;
+            loadPhoto(uri, temporaryFile);
+            return;
+        }
+        clearPendingCameraFile();
+        setStatus(R.string.status_camera_cancelled);
+    }
+
+    private void loadPhoto(Uri uri, File temporaryFile) {
         setProcessing(true);
         setStatus(R.string.status_loading);
         executorService.execute(() -> {
@@ -98,6 +142,10 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> showInputImage(bitmap));
             } catch (IOException | RuntimeException exception) {
                 runOnUiThread(() -> showFailure(getString(R.string.error_image)));
+            } finally {
+                if (temporaryFile != null) {
+                    temporaryFile.delete();
+                }
             }
         });
     }
@@ -106,8 +154,7 @@ public class MainActivity extends AppCompatActivity {
         if (inputBitmap == null || processing) {
             return;
         }
-        String apiKey = apiKeyInput.getText().toString().trim();
-        if (apiKey.isEmpty()) {
+        if (API_KEY.isEmpty() || "Your_API_Key".equals(API_KEY)) {
             setStatus(R.string.error_api_key);
             return;
         }
@@ -125,7 +172,7 @@ public class MainActivity extends AppCompatActivity {
         Bitmap source = inputBitmap;
         executorService.execute(() -> {
             try {
-                Bitmap result = apiClient.transform(apiKey, source, prompt);
+                Bitmap result = apiClient.transform(API_KEY, source, prompt);
                 runOnUiThread(() -> showOutputImage(result));
             } catch (Exception exception) {
                 String message = exception.getMessage() == null
@@ -214,7 +261,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateControls() {
         selectPhotoButton.setEnabled(!processing);
-        apiKeyInput.setEnabled(!processing);
+        takePhotoButton.setEnabled(!processing);
         styleSpinner.setEnabled(!processing);
         convertButton.setEnabled(!processing && inputBitmap != null);
     }
@@ -239,12 +286,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void clearPendingCameraFile() {
+        pendingCameraUri = null;
+        if (pendingCameraFile != null) {
+            pendingCameraFile.delete();
+            pendingCameraFile = null;
+        }
+    }
+
     @Override
     protected void onDestroy() {
         destroyed = true;
         if (executorService != null) {
             executorService.shutdownNow();
         }
+        clearPendingCameraFile();
         recycleInputBitmap();
         recycleOutputBitmap();
         super.onDestroy();
