@@ -29,6 +29,8 @@ app/src/main/res/xml/file_paths.xml
 
 `AndroidManifest.xml` は初期プロジェクトの launcher icon と theme が存在する前提の例です。プロジェクト側の icon / theme / backup 属性名が異なる場合は、それらを保持したまま `INTERNET` permission、`MainActivity`、Photo Picker 用 `service`、撮影用 `FileProvider` をマージしてください。
 
+HTTPS 通信は `INTERNET` permission と `HttpsURLConnection` により行います。manifest では `android:usesCleartextTraffic="false"` を設定し、暗号化されていない HTTP 通信を許可しない構成にしています。Gemini API はシステムが信頼する証明書を使う HTTPS endpoint のため、追加の network security resource は不要です。
+
 ## Gradle 確認
 
 新しいネットワークライブラリは不要です。API 呼び出しは Android 標準の `HttpsURLConnection` と `org.json` で行います。
@@ -77,6 +79,7 @@ private static final String API_KEY = "Your_API_Key";
 - Header: `x-goog-api-key`
 - Input: style instruction text + JPEG の base64 `inline_data`
 - Output: response parts に含まれる base64 `inlineData` 画像
+- Transport: `HttpsURLConnection` の TLS 通信のみ。cleartext HTTP は manifest で無効化。
 
 写真は通信量を抑えるため、送信前に最大辺 1280 px 以下の JPEG に縮小します。`写真を撮影` は `TakePicture` と `FileProvider` でアプリ cache 内の一時ファイルへ撮影し、変換入力として読み込んだ後に削除します。撮影した元画像を写真フォルダへ保存する機能は含みません。
 
