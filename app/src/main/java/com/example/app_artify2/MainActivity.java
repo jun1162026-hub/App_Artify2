@@ -86,10 +86,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Bitmap inputBitmap;
     private Bitmap outputBitmap;
-    private byte[] previewInputBytes;
-    private byte[] savedInputBytes;
-    private String outputPrompt;
-    private boolean outputIsHighQuality;
+    private byte[] uploadInputBytes;
     private Uri pendingCameraUri;
     private File pendingCameraFile;
     private boolean processing;
@@ -218,24 +215,23 @@ public class MainActivity extends AppCompatActivity {
         setProcessing(true);
         setStatus(R.string.status_converting);
         Bitmap source = inputBitmap;
-        byte[] encodedSource = previewInputBytes;
+        byte[] encodedSource = uploadInputBytes;
         executorService.execute(() -> {
             try {
                 byte[] preparedImage = encodedSource;
                 if (preparedImage == null) {
                     preparedImage = apiClient.prepareImage(
                             source,
-                            NanoBananaApiClient.PREVIEW_UPLOAD_DIMENSION
+                            NanoBananaApiClient.MAX_UPLOAD_DIMENSION
                     );
                 }
                 Bitmap result = apiClient.transform(
                         API_KEY,
                         preparedImage,
-                        prompt,
-                        NanoBananaApiClient.PREVIEW_OUTPUT_SIZE
+                        prompt
                 );
                 byte[] cachedImage = preparedImage;
-                runOnUiThread(() -> showOutputImage(result, prompt, cachedImage));
+                runOnUiThread(() -> showOutputImage(result, cachedImage));
             } catch (Exception exception) {
                 String message = exception.getMessage() == null
                         ? getString(R.string.error_image)
@@ -261,49 +257,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void saveGeneratedImage() {
-        if (outputBitmap == null || outputPrompt == null || inputBitmap == null || processing) {
+        if (outputBitmap == null || processing) {
             return;
         }
-        if (outputIsHighQuality) {
-            saveDisplayedHighQualityImage();
-            return;
-        }
-
-        setProcessing(true);
-        setStatus(R.string.status_generating_saved);
-        Bitmap source = inputBitmap;
-        byte[] encodedSource = savedInputBytes;
-        String prompt = outputPrompt;
-        executorService.execute(() -> {
-            try {
-                byte[] preparedImage = encodedSource;
-                if (preparedImage == null) {
-                    preparedImage = apiClient.prepareImage(
-                            source,
-                            NanoBananaApiClient.SAVED_UPLOAD_DIMENSION
-                    );
-                }
-                Bitmap highQualityResult = apiClient.transform(
-                        API_KEY,
-                        preparedImage,
-                        prompt,
-                        NanoBananaApiClient.SAVED_OUTPUT_SIZE
-                );
-                try {
-                    writeGeneratedImage(highQualityResult);
-                } catch (IOException | RuntimeException exception) {
-                    highQualityResult.recycle();
-                    throw exception;
-                }
-                byte[] cachedImage = preparedImage;
-                runOnUiThread(() -> showSavedOutputImage(highQualityResult, cachedImage));
-            } catch (Exception exception) {
-                runOnUiThread(() -> showFailure(getString(R.string.error_save)));
-            }
-        });
-    }
-
-    private void saveDisplayedHighQualityImage() {
         Bitmap bitmapToSave = outputBitmap.copy(Bitmap.Config.ARGB_8888, false);
         if (bitmapToSave == null) {
             showFailure(getString(R.string.error_save));
@@ -422,10 +378,7 @@ public class MainActivity extends AppCompatActivity {
         }
         recycleInputBitmap();
         inputBitmap = bitmap;
-        previewInputBytes = null;
-        savedInputBytes = null;
-        outputPrompt = null;
-        outputIsHighQuality = false;
+        uploadInputBytes = null;
         inputImageView.setImageBitmap(bitmap);
         inputImageView.setVisibility(View.VISIBLE);
         recycleOutputBitmap();
@@ -433,35 +386,18 @@ public class MainActivity extends AppCompatActivity {
         setStatus(R.string.status_selected);
     }
 
-    private void showOutputImage(Bitmap bitmap, String prompt, byte[] cachedInputBytes) {
+    private void showOutputImage(Bitmap bitmap, byte[] cachedInputBytes) {
         if (destroyed) {
             bitmap.recycle();
             return;
         }
         recycleOutputBitmap();
         outputBitmap = bitmap;
-        outputPrompt = prompt;
-        previewInputBytes = cachedInputBytes;
-        outputIsHighQuality = false;
+        uploadInputBytes = cachedInputBytes;
         outputImageView.setImageBitmap(bitmap);
         outputImageView.setVisibility(View.VISIBLE);
         setProcessing(false);
         setStatus(R.string.status_complete);
-    }
-
-    private void showSavedOutputImage(Bitmap bitmap, byte[] cachedInputBytes) {
-        if (destroyed) {
-            bitmap.recycle();
-            return;
-        }
-        recycleOutputBitmap();
-        outputBitmap = bitmap;
-        savedInputBytes = cachedInputBytes;
-        outputIsHighQuality = true;
-        outputImageView.setImageBitmap(bitmap);
-        outputImageView.setVisibility(View.VISIBLE);
-        setProcessing(false);
-        setStatus(R.string.status_saved);
     }
 
     private void showFailure(String message) {

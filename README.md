@@ -1,6 +1,6 @@
 # App_Artify2 - Nano Banana 2 Style Editor
 
-Android Studio の既存プロジェクトへマージするための、最小構成の Java/XML 実装です。写真フォルダから画像を 1 枚選択するか、その場で撮影し、画風を選ぶと、Gemini API の **Nano Banana 2** (`gemini-3.1-flash-image-preview`) に画像編集を依頼して高速プレビューし、高品質版を保存します。
+Android Studio の既存プロジェクトへマージするための、最小構成の Java/XML 実装です。写真フォルダから画像を 1 枚選択するか、その場で撮影し、画風を選ぶと、Gemini API の **Nano Banana 2** (`gemini-3.1-flash-image-preview`) に画像編集を依頼して結果を表示・保存します。
 
 ## 前提
 
@@ -68,9 +68,9 @@ private static final String API_KEY = "Your_API_Key";
 1. Google AI Studio で Nano Banana 2 を使用可能な paid API key を取得します。
 2. `MainActivity.java` の `"Your_API_Key"` を実 API key に置き換え、アプリを起動します。
 3. `写真を選択` から写真フォルダ内の画像を選ぶか、`写真を撮影` で新しい写真を撮ります。
-4. 画風を選択し、`画風をプレビュー` をタップします。
-5. API から返った `512` 解像度ティアの変換プレビュー画像が画面下部に表示されます。
-6. `高品質で保存` をタップすると、同じ画風で 1K 画像を再生成し、端末の `Pictures/Artify` に JPEG として保存します。
+4. 画風を選択し、`画風を変換` をタップします。
+5. API から返った変換済み画像が画面下部に表示されます。
+6. `結果を保存` をタップすると、表示された生成画像を端末の `Pictures/Artify` に JPEG として保存します。
 
 配布アプリにする場合は、API キーをクライアントへ埋め込まない認証・プロキシ設計へ移行してください。
 
@@ -90,13 +90,11 @@ private static final String API_KEY = "Your_API_Key";
 - Header: `x-goog-api-key`
 - Input: style instruction text + JPEG の base64 `inline_data`
 - Output: response parts に含まれる base64 `inlineData` 画像
-- Preview output size: `generationConfig.responseFormat.image.imageSize = "512"`
-- Saved output size: `generationConfig.responseFormat.image.imageSize = "1K"`
 - Transport: `HttpsURLConnection` の TLS 通信のみ。cleartext HTTP は manifest で無効化。
 
-画面プレビューは待ち時間を抑えるため、入力を最大辺 1024 px の JPEG に縮小し、Nano Banana 2 が対応する `512` 出力を要求します。同じ写真で別の画風を試す場合は、作成済みのプレビュー入力 JPEG を再利用します。
+待ち時間と通信量を抑えるため、API へ送る入力画像を最大辺 1024 px の JPEG に縮小します。同じ写真で別の画風を試す場合は、作成済みの入力 JPEG を再利用し、端末側の縮小・圧縮処理を繰り返しません。
 
-`高品質で保存` は、プレビュー画像を表示している状態では同じ画風プロンプトで新たに API を呼び出し、入力を最大辺 1280 px として `1K` 出力を要求します。追加の API 呼び出しと料金が発生し、生成処理の性質上、保存された高品質画像はプレビューと細部が異なる場合があります。保存に成功すると、画面表示も実際に保存した高品質画像に更新します。すでに高品質画像を表示している状態で再度保存する場合は、その表示画像を保存し、API を再呼び出ししません。
+Nano Banana 2 のドキュメントは出力サイズ指定を案内していますが、実行時に `generationConfig.responseFormat.image.imageSize` を含む画像編集 request が拒否されたため、この最小実装では出力サイズを指定せず API の既定出力を使用します。保存操作は画面に表示済みの生成画像を直接保存し、追加の API 呼び出しや再生成は行いません。
 
 `写真を撮影` は `TakePicture` と `FileProvider` でアプリ cache 内の一時ファイルへ撮影し、変換入力として読み込んだ後に削除します。撮影した元画像は保存せず、API で生成された結果のみを保存します。
 
