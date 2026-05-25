@@ -48,24 +48,23 @@ public class MainActivity extends AppCompatActivity {
                     + "with visible brush strokes, layered paint, and rich museum-style color.",
             "Transform the provided photograph into a hand-painted anime background scene "
                     + "with warm light, detailed scenery, and cinematic color.",
-            "Transform the provided photograph into a painting inspired by Vincent van Gogh, "
-                    + "with swirling directional brushwork, thick impasto, and vivid cobalt-blue "
-                    + "and yellow contrasts.",
-            "Transform the provided photograph into a painting inspired by Claude Monet, "
-                    + "with softly broken color, luminous atmospheric light, and gently "
-                    + "dissolved edges.",
-            "Transform the provided photograph into a Cubist painting inspired by Pablo Picasso, "
+            "Transform the provided photograph into a late nineteenth-century Post-Impressionist "
+                    + "painting with swirling directional brushwork, thick impasto, and vivid "
+                    + "cobalt-blue and yellow contrasts.",
+            "Transform the provided photograph into a luminous Impressionist plein-air painting "
+                    + "with softly broken color, atmospheric light, and gently dissolved edges.",
+            "Transform the provided photograph into an early twentieth-century Cubist painting "
                     + "with geometric facets, multiple viewpoints, strong outlines, and balanced "
                     + "ochre and blue planes.",
-            "Transform the provided photograph into a decorative painting inspired by Gustav "
-                    + "Klimt, with golden mosaic-like ornament, patterned surfaces, and elegant "
-                    + "flat composition.",
-            "Transform the provided photograph into a painting inspired by Johannes Vermeer, "
-                    + "with quiet window light, soft realism, and deep ultramarine and warm "
-                    + "yellow accents.",
-            "Transform the provided photograph into an expressionist painting inspired by "
-                    + "Edvard Munch, with flowing contours, intense color contrast, and a "
-                    + "dramatic emotional atmosphere."
+            "Transform the provided photograph into an ornamental Art Nouveau painting with "
+                    + "golden mosaic-like patterns, decorative surfaces, and an elegant flat "
+                    + "composition.",
+            "Transform the provided photograph into a quiet seventeenth-century Dutch interior "
+                    + "painting with soft window light, realistic detail, deep ultramarine, "
+                    + "and warm yellow accents.",
+            "Transform the provided photograph into an intense expressionist painting with "
+                    + "flowing contours, dramatic color contrast, and an emotionally charged "
+                    + "atmosphere."
     };
 
     private ActivityResultLauncher<PickVisualMediaRequest> photoPicker;

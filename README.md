@@ -82,7 +82,7 @@ private static final String API_KEY = "Your_API_Key";
 - ゴッホ風、モネ風、ピカソ風（キュビスム）
 - クリムト風、フェルメール風、ムンク風
 
-実在の画家プリセットは特定作品を複製する指定ではなく、筆致、光、構図、色彩などの特徴をプロンプト化しています。
+実在の画家プリセットは表示名として選べますが、API へ送る指示は特定作品や画家名の複製指定ではなく、筆致、光、構図、色彩などの特徴をプロンプト化しています。
 
 ## API 実装
 
@@ -99,6 +99,8 @@ Nano Banana 2 のドキュメントは出力サイズ指定を案内していま
 `写真を撮影` は `TakePicture` と `FileProvider` でアプリ cache 内の一時ファイルへ撮影し、変換入力として読み込んだ後に削除します。撮影した元画像は保存せず、API で生成された結果のみを保存します。
 
 保存処理は `MediaStore` を使います。Android 10 (API 29) 以降では追加権限なしで `Pictures/Artify` に保存し、Android 6.0〜9 (API 23〜28) では保存ボタンを押した時に限り `WRITE_EXTERNAL_STORAGE` を要求します。manifest ではこの権限を `android:maxSdkVersion="28"` に制限しています。
+
+API が画像を返さない場合、レスポンスの `finishReason` や `promptFeedback.blockReason` を読み取り、`IMAGE_SAFETY`、`NO_IMAGE`、`IMAGE_RECITATION` などの原因に合わせた再試行メッセージを表示します。
 
 ## References
 
