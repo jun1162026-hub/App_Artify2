@@ -21,10 +21,7 @@ import java.nio.charset.StandardCharsets;
 import javax.net.ssl.HttpsURLConnection;
 
 public final class NanoBananaApiClient {
-    public static final int PREVIEW_UPLOAD_DIMENSION = 1024;
-    public static final int SAVED_UPLOAD_DIMENSION = 1280;
-    public static final String PREVIEW_OUTPUT_SIZE = "512";
-    public static final String SAVED_OUTPUT_SIZE = "1K";
+    public static final int MAX_UPLOAD_DIMENSION = 1024;
 
     private static final String ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -34,11 +31,10 @@ public final class NanoBananaApiClient {
     public Bitmap transform(
             String apiKey,
             byte[] sourceImageBytes,
-            String prompt,
-            String outputImageSize
+            String prompt
     )
             throws IOException, JSONException {
-        JSONObject request = buildRequest(sourceImageBytes, prompt, outputImageSize);
+        JSONObject request = buildRequest(sourceImageBytes, prompt);
         byte[] payload = request.toString().getBytes(StandardCharsets.UTF_8);
 
         HttpsURLConnection connection = (HttpsURLConnection) new URL(ENDPOINT).openConnection();
@@ -85,7 +81,7 @@ public final class NanoBananaApiClient {
         }
     }
 
-    private JSONObject buildRequest(byte[] sourceImageBytes, String prompt, String outputImageSize)
+    private JSONObject buildRequest(byte[] sourceImageBytes, String prompt)
             throws JSONException {
         String imageData = Base64.encodeToString(sourceImageBytes, Base64.NO_WRAP);
 
@@ -102,14 +98,7 @@ public final class NanoBananaApiClient {
                 .put(new JSONObject().put("parts", parts));
 
         JSONObject generationConfig = new JSONObject()
-                .put("responseModalities", new JSONArray().put("IMAGE"))
-                .put(
-                        "responseFormat",
-                        new JSONObject().put(
-                                "image",
-                                new JSONObject().put("imageSize", outputImageSize)
-                        )
-                );
+                .put("responseModalities", new JSONArray().put("IMAGE"));
 
         return new JSONObject()
                 .put("contents", contents)
