@@ -126,27 +126,86 @@ public final class NanoBananaApiClient {
         JSONObject response = new JSONObject(responseBody);
         JSONArray candidates = response.optJSONArray("candidates");
         if (candidates == null || candidates.length() == 0) {
-            throw new IOException("画像が生成されませんでした。");
+            JSONObject promptFeedback = response.optJSONObject("promptFeedback");
+            String blockReason = promptFeedback == null
+                    ? ""
+                    : promptFeedback.optString("blockReason");
+            if (!blockReason.isEmpty()) {
+                throw new IOException(buildNoImageMessage(blockReason, ""));
+            }
+            throw new IOException("画像が生成されませんでした。別の写真または画風で再試行してください。");
         }
 
-        JSONArray parts = candidates.getJSONObject(0)
-                .getJSONObject("content")
-                .getJSONArray("parts");
-        for (int index = 0; index < parts.length(); index++) {
-            JSONObject part = parts.getJSONObject(index);
-            JSONObject inlineData = part.optJSONObject("inlineData");
-            if (inlineData == null) {
-                inlineData = part.optJSONObject("inline_data");
+        String finishReason = "";
+        String finishMessage = "";
+        for (int candidateIndex = 0; candidateIndex < candidates.length(); candidateIndex++) {
+            JSONObject candidate = candidates.optJSONObject(candidateIndex);
+            if (candidate == null) {
+                continue;
             }
-            if (inlineData != null && inlineData.has("data")) {
-                byte[] bytes = Base64.decode(inlineData.getString("data"), Base64.DEFAULT);
-                Bitmap result = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                if (result != null) {
-                    return result;
+            finishReason = candidate.optString("finishReason", finishReason);
+            finishMessage = candidate.optString("finishMessage", finishMessage);
+            JSONObject content = candidate.optJSONObject("content");
+            JSONArray parts = content == null ? null : content.optJSONArray("parts");
+            if (parts == null) {
+                continue;
+            }
+            for (int partIndex = 0; partIndex < parts.length(); partIndex++) {
+                JSONObject part = parts.optJSONObject(partIndex);
+                if (part == null) {
+                    continue;
+                }
+                JSONObject inlineData = part.optJSONObject("inlineData");
+                if (inlineData == null) {
+                    inlineData = part.optJSONObject("inline_data");
+                }
+                if (inlineData != null && inlineData.has("data")) {
+                    byte[] bytes = Base64.decode(inlineData.getString("data"), Base64.DEFAULT);
+                    Bitmap result = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                    if (result != null) {
+                        return result;
+                    }
                 }
             }
         }
-        throw new IOException("API 応答に変換画像が含まれていません。");
+        throw new IOException(buildNoImageMessage(finishReason, finishMessage));
+    }
+
+    private String buildNoImageMessage(String reason, String detail) {
+        String message;
+        switch (reason) {
+            case "IMAGE_SAFETY":
+            case "SAFETY":
+            case "PROHIBITED_CONTENT":
+            case "IMAGE_PROHIBITED_CONTENT":
+                message = "安全性フィルタにより画像を生成できませんでした。"
+                        + "別の写真または画風をお試しください。";
+                break;
+            case "IMAGE_RECITATION":
+            case "RECITATION":
+                message = "類似性の判定により画像生成が停止されました。"
+                        + "別の画風をお試しください。";
+                break;
+            case "NO_IMAGE":
+            case "IMAGE_OTHER":
+                message = "画像を生成できませんでした。別の写真または画風で再試行してください。";
+                break;
+            case "BLOCKLIST":
+                message = "使用できない語句が含まれるため画像を生成できませんでした。"
+                        + "別の画風をお試しください。";
+                break;
+            default:
+                message = "API 応答に変換画像が含まれていませんでした。"
+                        + "別の写真または画風で再試行してください。";
+                break;
+        }
+        if (reason != null && !reason.isEmpty()) {
+            message += " (" + reason + ")";
+        }
+        if (detail != null && !detail.isEmpty()) {
+            message += " " + detail;
+        }
+        return message;
     }
 
     private String readBody(InputStream inputStream) throws IOException {
