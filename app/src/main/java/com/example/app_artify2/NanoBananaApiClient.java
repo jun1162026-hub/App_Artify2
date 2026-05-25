@@ -21,12 +21,12 @@ import java.nio.charset.StandardCharsets;
 import javax.net.ssl.HttpsURLConnection;
 
 public final class NanoBananaApiClient {
-    public static final int MAX_UPLOAD_DIMENSION = 1024;
+    public static final int MAX_UPLOAD_DIMENSION = 256;
 
     private static final String ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/"
                     + "gemini-3.1-flash-image-preview:generateContent";
-    private static final int JPEG_QUALITY = 90;
+    private static final int UPLOAD_JPEG_QUALITY = 20;
 
     public Bitmap transform(
             String apiKey,
@@ -70,7 +70,11 @@ public final class NanoBananaApiClient {
     public byte[] prepareImage(Bitmap sourceImage, int maxUploadDimension) throws IOException {
         Bitmap uploadBitmap = resizeForUpload(sourceImage, maxUploadDimension);
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            if (!uploadBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, outputStream)) {
+            if (!uploadBitmap.compress(
+                    Bitmap.CompressFormat.JPEG,
+                    UPLOAD_JPEG_QUALITY,
+                    outputStream
+            )) {
                 throw new IOException("画像の送信準備に失敗しました。");
             }
             return outputStream.toByteArray();

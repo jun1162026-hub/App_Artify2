@@ -92,9 +92,11 @@ private static final String API_KEY = "Your_API_Key";
 - Output: response parts に含まれる base64 `inlineData` 画像
 - Transport: `HttpsURLConnection` の TLS 通信のみ。cleartext HTTP は manifest で無効化。
 
-待ち時間と通信量を抑えるため、API へ送る入力画像を最大辺 1024 px の JPEG に縮小します。同じ写真で別の画風を試す場合は、作成済みの入力 JPEG を再利用し、端末側の縮小・圧縮処理を繰り返しません。
+送信負荷をできるだけ抑えるため、API へ送る入力画像だけを最大辺 256 px、JPEG quality 20 に強く縮小・圧縮します。同じ写真で別の画風を試す場合は、作成済みの入力 JPEG を再利用し、端末側の縮小・圧縮処理を繰り返しません。この設定では細部や小さな被写体の再現性が低下する場合があります。
 
 Nano Banana 2 のドキュメントは出力サイズ指定を案内していますが、実行時に `generationConfig.responseFormat.image.imageSize` を含む画像編集 request が拒否されたため、この最小実装では出力サイズを指定せず API の既定出力を使用します。保存操作は画面に表示済みの生成画像を直接保存し、追加の API 呼び出しや再生成は行いません。
+
+API から返ってきた生成画像には追加の縮小や再圧縮を行わず、画面表示と保存処理へ渡します。保存時の JPEG 出力品質も変更していません。
 
 `写真を撮影` は `TakePicture` と `FileProvider` でアプリ cache 内の一時ファイルへ撮影し、変換入力として読み込んだ後に削除します。撮影した元画像は保存せず、API で生成された結果のみを保存します。
 
