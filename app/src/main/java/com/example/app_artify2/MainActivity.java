@@ -131,6 +131,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void selectPhoto() {
+        setStatus(R.string.status_opening_picker);
         photoPicker.launch(new PickVisualMediaRequest.Builder()
                 .setMediaType(PickVisualMedia.ImageOnly.INSTANCE)
                 .build());
@@ -146,6 +147,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void takePhoto() {
         try {
+            setStatus(R.string.status_opening_camera);
             clearPendingCameraFile();
             File cameraDirectory = new File(getCacheDir(), "camera");
             if (!cameraDirectory.exists() && !cameraDirectory.mkdirs()) {
@@ -211,8 +213,11 @@ public class MainActivity extends AppCompatActivity {
                 + " Preserve the subject, composition, and recognizable details of the "
                 + "original photograph. Return one edited image without added text or borders.";
 
+        recycleOutputBitmap();
         setProcessing(true);
-        setStatus(R.string.status_converting);
+        setStatus(uploadInputBytes == null
+                ? R.string.status_preparing_upload
+                : R.string.status_using_cached_upload);
         Bitmap source = inputBitmap;
         byte[] encodedSource = uploadInputBytes;
         executorService.execute(() -> {
@@ -227,7 +232,8 @@ public class MainActivity extends AppCompatActivity {
                 Bitmap result = apiClient.transform(
                         API_KEY,
                         preparedImage,
-                        prompt
+                        prompt,
+                        this::showApiProgress
                 );
                 byte[] cachedImage = preparedImage;
                 runOnUiThread(() -> showOutputImage(result, cachedImage));
@@ -259,16 +265,17 @@ public class MainActivity extends AppCompatActivity {
         if (outputBitmap == null || processing) {
             return;
         }
+        setProcessing(true);
+        setStatus(R.string.status_preparing_save);
         Bitmap bitmapToSave = outputBitmap.copy(Bitmap.Config.ARGB_8888, false);
         if (bitmapToSave == null) {
             showFailure(getString(R.string.error_save));
             return;
         }
 
-        setProcessing(true);
-        setStatus(R.string.status_saving);
         executorService.execute(() -> {
             try {
+                postStatus(R.string.status_saving);
                 writeGeneratedImage(bitmapToSave);
                 runOnUiThread(() -> {
                     if (!destroyed) {
@@ -424,6 +431,30 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText(stringId);
     }
 
+    private void showApiProgress(NanoBananaApiClient.Progress progress) {
+        switch (progress) {
+            case SENDING_REQUEST:
+                postStatus(R.string.status_sending_request);
+                break;
+            case WAITING_FOR_RESULT:
+                postStatus(R.string.status_waiting_result);
+                break;
+            case DECODING_RESULT:
+                postStatus(R.string.status_decoding_result);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void postStatus(int stringId) {
+        runOnUiThread(() -> {
+            if (!destroyed && processing) {
+                setStatus(stringId);
+            }
+        });
+    }
+
     private void recycleInputBitmap() {
         if (inputBitmap != null) {
             inputBitmap.recycle();
@@ -455,6 +486,7 @@ public class MainActivity extends AppCompatActivity {
             executorService.shutdownNow();
         }
         clearPendingCameraFile();
+        uploadInputBytes = null;
         recycleInputBitmap();
         recycleOutputBitmap();
         super.onDestroy();

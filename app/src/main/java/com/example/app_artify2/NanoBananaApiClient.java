@@ -28,10 +28,21 @@ public final class NanoBananaApiClient {
                     + "gemini-3.1-flash-image-preview:generateContent";
     private static final int UPLOAD_JPEG_QUALITY = 20;
 
+    public enum Progress {
+        SENDING_REQUEST,
+        WAITING_FOR_RESULT,
+        DECODING_RESULT
+    }
+
+    public interface ProgressListener {
+        void onProgress(Progress progress);
+    }
+
     public Bitmap transform(
             String apiKey,
             byte[] sourceImageBytes,
-            String prompt
+            String prompt,
+            ProgressListener progressListener
     )
             throws IOException, JSONException {
         JSONObject request = buildRequest(sourceImageBytes, prompt);
@@ -47,10 +58,12 @@ public final class NanoBananaApiClient {
         connection.setFixedLengthStreamingMode(payload.length);
 
         try {
+            notifyProgress(progressListener, Progress.SENDING_REQUEST);
             try (OutputStream outputStream = connection.getOutputStream()) {
                 outputStream.write(payload);
             }
 
+            notifyProgress(progressListener, Progress.WAITING_FOR_RESULT);
             int statusCode = connection.getResponseCode();
             String responseBody = readBody(
                     statusCode >= HttpURLConnection.HTTP_BAD_REQUEST
@@ -61,9 +74,16 @@ public final class NanoBananaApiClient {
                     || statusCode >= HttpURLConnection.HTTP_MULT_CHOICE) {
                 throw new IOException(readErrorMessage(responseBody, statusCode));
             }
+            notifyProgress(progressListener, Progress.DECODING_RESULT);
             return parseImage(responseBody);
         } finally {
             connection.disconnect();
+        }
+    }
+
+    private void notifyProgress(ProgressListener progressListener, Progress progress) {
+        if (progressListener != null) {
+            progressListener.onProgress(progress);
         }
     }
 
