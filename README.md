@@ -104,6 +104,8 @@ API から返ってきた生成画像には追加の縮小や再圧縮を行わ�
 
 API が画像を返さない場合、レスポンスの `finishReason` や `promptFeedback.blockReason` を読み取り、`IMAGE_SAFETY`、`NO_IMAGE`、`IMAGE_RECITATION` などの原因に合わせた再試行メッセージを表示します。
 
+変換時には、送信画像の準備、キャッシュ再利用、API 送信、生成待機、受信画像の読み込み、保存準備、保存書き込みの各段階を画面の状態メッセージに表示します。新しい変換を開始すると、前回の生成結果 bitmap は先に解放して、新しい結果の decode 時に二つの大きな出力画像を同時保持しないようにしています。
+
 ## References
 
 - [Nano Banana image generation - Gemini API](https://ai.google.dev/gemini-api/docs/image-generation)
